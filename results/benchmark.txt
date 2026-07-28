@@ -1,0 +1,151 @@
+==============================================================================
+ mini-git benchmark
+==============================================================================
+  platform    macos aarch64
+  cpu         Apple M4
+  rustc       rustc 1.84.0 (9fc6b4312 2025-01-07)
+  git         git version 2.54.0
+  profile     release
+
+==============================================================================
+1. Storage: mini-git versus copying the directory once per commit
+==============================================================================
+
+Workload: 200 files, 20 commits, 10 files changed per commit (5% churn)
+
+  Copy the whole directory once per commit      13.08 MiB
+  mini-git .git/objects (deduplicated + zlib)   241.8 KiB
+
+  Overall storage ratio       55.42x  (13.08 MiB -> 241.8 KiB)
+  Space saved                 98.2%
+
+That ratio combines two separate effects. Split apart:
+
+  Deduplication alone         10.24x  (13.08 MiB of file content -> 1.28 MiB unique)
+  Compression alone           5.41x  (unique content -> bytes on disk)
+
+Object counts:
+  File versions committed (files x commits)      4000
+  Unique blobs actually stored                   390
+  All objects stored (blobs + trees + commits)   819
+  Blob writes avoided by content addressing      3610 (90.2%)
+
+Reading: a file that does not change between commits hashes to the id it
+already has, so the write is skipped. No diffing and no comparison is
+involved -- the path in .git/objects is simply already occupied.
+
+==============================================================================
+2. zlib compression on the object store
+==============================================================================
+
+Measured over all 819 objects in the store.
+
+  Uncompressed framed object bytes                1.35 MiB
+  On disk at zlib level 1 (git's loose default)   241.8 KiB
+  Same objects at zlib level 6                    232.1 KiB
+
+  Compression ratio, level 1  5.72x  (17.5% of original size)
+  Compression ratio, level 6  5.96x  (16.8% of original size)
+  Level 6 would save a further 4.0% over level 1
+
+Level 1 is deliberate: it is git's core.loosecompression default, so a
+repository this tool writes has the same storage profile as a real one.
+Compression is not part of an object's identity -- the name is the SHA-1 of
+the uncompressed bytes -- so either level interoperates. The trade is real
+and is stated rather than assumed.
+
+==============================================================================
+3. Time to stage and commit a directory of N files
+==============================================================================
+
+Wall-clock time for the real `mgit` binary, including process startup.
+Each cell is `min (median)` in milliseconds over 9 runs, after 2 warmups. Each run rebuilds the project files in place and deletes .git, rather than creating a fresh directory -- see the note on REPS in bench/main.rs.
+First commit stages every file; the second changes 5% of them.
+
+   files        size          add (cold)              commit          add (warm)              commit
+  ----------------------------------------------------------------------------------------------------
+      50   166.8 KiB        30.4 (110.5)         24.3 (28.7)           7.4 (8.3)           6.0 (7.6)
+     100   333.6 KiB        49.2 (145.1)         23.7 (24.3)         10.0 (10.3)           7.4 (8.1)
+     200   667.3 KiB        91.2 (131.4)         24.0 (24.4)         13.9 (14.5)         10.2 (11.9)
+     400    1.30 MiB       176.0 (187.5)         22.9 (24.3)         46.8 (49.2)         14.3 (15.9)
+     800    2.61 MiB       315.5 (344.0)         22.6 (25.4)        85.0 (160.7)         17.7 (19.5)
+
+`add` dominates because it reads, hashes, compresses, and writes every
+staged file. The warm `add` re-reads and re-hashes every file too -- this
+index stores no stat cache, so it cannot skip unchanged files the way real
+git does. It still avoids the *writes*, which is why the store stays small.
+
+==============================================================================
+4. Time for `log` over N commits
+==============================================================================
+
+`min (median)` over 9 runs, after 2 warmups.
+
+   commits           log (all)           log -n 10
+  --------------------------------------------------
+        10           2.2 (2.3)           2.2 (2.4)
+        50           3.6 (4.6)           2.6 (3.0)
+       100           5.1 (5.3)           2.7 (3.6)
+       250           7.9 (8.5)           2.5 (2.7)
+       500         26.3 (38.2)           2.5 (3.9)
+
+The `log -n 10` column is flat -- roughly 2.5 ms whether the repository holds
+10 commits or 500 -- because the limit is applied inside the traversal rather
+than by truncating a fully-built list afterwards. An earlier version built the
+whole history first, and that column grew with repository size instead.
+
+The `log (all)` column is reported as measured, with one caveat stated
+plainly rather than smoothed over. Beyond roughly 250 commits it grows faster
+than linearly, and the cause was not conclusively isolated. What was ruled
+out by direct measurement:
+
+  * Output volume. Printing 3,600 lines instead of 400 for the same 400-commit
+    walk cost 10% more (49.3 ms vs 44.9 ms), so formatting is not the cost.
+  * Object store size. Walking 200 commits cost the same (7.5 ms vs 7.8 ms) in
+    a 4,005-object repository and a 2,005-object one.
+
+Every operation inside the walk is O(1) per commit -- one file read, one
+inflate, one SHA-1 verify over a ~250 byte object, one parent pointer. The
+remaining candidates are outside this program: per-process scheduling on
+Apple Silicon's efficiency versus performance cores, and allocator behaviour
+as the retained commit list grows. Treat the linear region (up to ~250
+commits, about 25 microseconds per commit) as the defensible figure, and do
+not quote the full-history column as evidence of linear scaling.
+
+==============================================================================
+5. Tests
+==============================================================================
+
+Declared `#[test]` functions by file:
+
+  src/commands/mod.rs                   3
+  src/diff.rs                          13
+  src/index.rs                          8
+  src/object.rs                        17
+  src/oid.rs                            4
+  src/repo.rs                          10
+  src/store.rs                          9
+  src/trees.rs                          8
+  tests/e2e.rs                         30
+  tests/interop.rs                     11
+  TOTAL                               113
+
+Running `cargo test` to confirm...
+
+  Tests passed        113
+  Tests failed        0
+  Suite exit status   ok
+
+What they cover:
+  src/*.rs         unit tests: object framing and hashing, tree serialization
+                   and Git's directory sort order, commit parsing, the index
+                   format, LCS diff, zlib round-trips, corruption detection.
+  tests/e2e.rs     the compiled binary driven end to end in temp directories:
+                   init, add, status, commit, log, diff, branch, checkout.
+  tests/interop.rs real `git` in both directions -- git reading objects and
+                   whole repositories mgit wrote (including `git fsck
+                   --strict`), mgit reading objects git wrote, and both
+                   producing identical blob, tree, and commit hashes for the
+                   same content.
+
+All figures above were measured during this run.

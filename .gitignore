@@ -1,0 +1,7 @@
+# Build artifacts
+/target
+/tmp
+
+# The benchmark writes results/benchmark.txt, which IS checked in on purpose:
+# the measured numbers in README.md are only reproducible if the run that
+# produced them is recorded alongside them.

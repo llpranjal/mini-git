@@ -1,0 +1,147 @@
+RESUME BULLETS - mini-git
+=========================
+
+Every number below came from ./scripts/bench.sh and is recorded in
+results/benchmark.txt. Character counts are shown so you can confirm each line
+stays under the 235 limit your LaTeX template compresses past.
+
+Suggested project header line:
+
+  Mini Git (Content-Addressed Version Control) | Rust, SHA-1, zlib, Cargo
+
+
+-----------------------------------------------------------------------------
+TWO BULLET VERSION
+-----------------------------------------------------------------------------
+
+Built a version control system in Rust implementing Git's on-disk object
+format, storing zlib-compressed blobs, trees, and commits named by SHA-1 of
+framed bytes, so real git log and git fsck --strict run on repositories it
+writes.
+                                                              [231 characters]
+
+Measured storage over 200 files and 20 commits at 5% churn, compressing 13.08
+MiB of per-commit directory copies to 241.8 KiB (55x) by collapsing 4,000 file
+versions into 390 blobs and eliminating 90.2% of blob writes.
+                                                              [218 characters]
+
+
+-----------------------------------------------------------------------------
+THREE BULLET VERSION
+-----------------------------------------------------------------------------
+
+Built a version control system in Rust implementing Git's on-disk object
+format, storing zlib-compressed blobs, trees, and commits named by SHA-1 of
+their framed bytes across 10 commands and 4 runtime dependencies.
+                                                              [214 characters]
+
+Verified bidirectional git interoperability in 11 integration tests, passing
+git fsck --strict on tool-written repositories and matching git blob, tree, and
+commit SHA-1s on identical input, across 113 passing tests.
+                                                              [216 characters]
+
+Measured storage over 200 files and 20 commits at 5% churn, compressing 13.08
+MiB of per-commit directory copies to 241.8 KiB (55x) by collapsing 4,000 file
+versions into 390 content-addressed blobs, a 10.2x dedup and 5.7x zlib ratio.
+                                                              [234 characters]
+
+
+-----------------------------------------------------------------------------
+SWAP-IN ALTERNATIVES
+-----------------------------------------------------------------------------
+
+Use these if you want a performance angle instead of a storage angle, or if a
+specific role cares more about optimization than about format fidelity.
+
+Replaces the third bullet, performance framing:
+
+  Cut bounded history traversal from linear to constant time (2.5 ms flat
+  across 10 to 500 commits) by applying the commit limit inside the
+  parent-pointer walk instead of truncating a fully built history.
+                                                              [202 characters]
+
+Replaces the third bullet, throughput framing:
+
+  Staged and committed 800 files in 316 ms with commit time flat at 23 ms
+  independent of project size, by hashing content once at staging and building
+  trees from object ids already in hand.
+                                                              [187 characters]
+
+
+-----------------------------------------------------------------------------
+WHERE EACH NUMBER COMES FROM
+-----------------------------------------------------------------------------
+
+55x / 13.08 MiB / 241.8 KiB   benchmark section 1, overall storage ratio 55.42x
+4,000 file versions            benchmark section 1, 200 files x 20 commits
+390 blobs / 90.2%              benchmark section 1, object counts
+10.2x deduplication            benchmark section 1, dedup isolated from zlib
+5.7x zlib ratio                benchmark section 2, level 1, ratio 5.72x
+113 tests / 11 interop         benchmark section 5, confirmed by cargo test
+316 ms for 800 files           benchmark section 3, add (cold), min of 9 runs
+23 ms commit                   benchmark section 3, commit column, flat
+2.5 ms log -n 10               benchmark section 4, flat from 10 to 500 commits
+10 commands                    init, hash-object, cat-file, add, commit, log,
+                               status, diff, checkout, branch
+
+
+-----------------------------------------------------------------------------
+DO NOT CLAIM ANY OF THE FOLLOWING
+-----------------------------------------------------------------------------
+
+These are either false, unproven, or true only with a qualifier that will not
+survive being read out loud in an interview.
+
+1. Do NOT say "a full Git implementation" or "Git clone."
+   There is no merge, no rebase, no remote, no fetch, push, or clone, no
+   packfile support, no garbage collection, no .gitignore, and no revision
+   syntax beyond HEAD, a branch name, and a hash prefix. Say "a mini version
+   control system using Git's object format."
+
+2. Do NOT say the loose object files are byte-identical to git's.
+   They are not. flate2 uses the miniz_oxide backend, which emits different
+   (valid) level-1 zlib streams than C zlib. What IS true and provable is that
+   the two tools produce identical object IDs and can read each other's files.
+
+3. Do NOT claim it can read any real git repository.
+   It reads loose objects only. A repository that has been git gc-ed has its
+   objects in packfiles, which this cannot read. Say "reads loose objects
+   written by real git."
+
+4. Do NOT claim git status works normally in repositories it creates.
+   The staging index is at .git/mini-index, not .git/index, so git needs a
+   git read-tree HEAD first. This is a deliberate trade and it is the reason
+   git commands do not break, but do not overstate it.
+
+5. Do NOT claim linear scaling for full-history log.
+   Full log grows faster than linearly past roughly 250 commits and the cause
+   was not isolated. The defensible figures are the linear region (about 25
+   microseconds per commit up to ~250) and the flat log -n 10 result.
+
+6. Do NOT present 55x as a pure deduplication number.
+   It combines deduplication (10.2x) with zlib compression (5.7x). If a single
+   number is needed, use 55x for total storage reduction versus copying the
+   directory each commit, and say so. Quote 10.2x when you mean deduplication.
+
+7. Do NOT generalize the compression ratio.
+   5.7x was measured on generated source-like text, which is highly
+   compressible. A repository of images or binaries would be near 1.0x.
+
+8. Do NOT imply the benchmark workload is a real codebase.
+   It is synthetic: 200 generated files, 20 commits, 5% of files changed per
+   commit. The churn rate is the number that makes the dedup ratio meaningful,
+   so state it whenever you state the ratio.
+
+9. Do NOT claim performance parity with git.
+   It is slower on status and diff because the index stores no stat cache, so
+   every tracked file is re-read and re-hashed on every invocation. This is the
+   single biggest gap and it is better to raise it yourself.
+
+10. Do NOT claim it is safe against SHA-1 collisions.
+    There is no collision detection. On a collision the second object is
+    silently not stored. Real git ships sha1collisiondetection and is moving to
+    SHA-256. Know this answer, because it is a common follow-up.
+
+11. Do NOT claim concurrency safety.
+    There is no index lock. Two processes staging at once can lose one side's
+    work. Individual writes are atomic via rename, so nothing is corrupted.

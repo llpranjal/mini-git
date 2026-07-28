@@ -1,0 +1,41 @@
+[package]
+name = "mini-git"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "A minimal, byte-compatible reimplementation of Git's object database and porcelain."
+
+# Two binaries share one library so that integration tests and the benchmark can
+# call the same code the CLI calls, instead of re-implementing it.
+[lib]
+name = "mini_git"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mgit"
+path = "src/main.rs"
+
+[[bin]]
+name = "mgit-bench"
+path = "bench/main.rs"
+
+# Four dependencies, each justified in README.md ("Dependencies"), and zero
+# dev-dependencies: the tests use a hand-rolled scratch-directory helper
+# (src/scratch.rs) instead of pulling in `tempfile`. Everything else is written
+# by hand, including the object codec, the index format, the diff algorithm,
+# and ref resolution.
+#
+# Versions are pinned with `=` because this project targets Rust 1.84, while the
+# newest releases of clap and its transitive dependencies require the 2024
+# edition (Rust 1.85+). Without the pins, a fresh `cargo build` resolves to
+# versions that do not compile here. See JOURNAL.md.
+[dependencies]
+sha1 = "=0.10.6"    # SHA-1 digest. Git names objects by SHA-1; hand-rolling a
+                    # hash function would be a correctness liability, not a lesson.
+flate2 = "=1.0.35"  # zlib (RFC 1950) deflate/inflate. Git's loose object files
+                    # are zlib streams, so this must match to interoperate.
+clap = { version = "=4.5.23", features = ["derive"] } # Argument parsing only.
+anyhow = "=1.0.95"  # Error type with context chaining, so failures print a path.
+
+[profile.release]
+opt-level = 3
