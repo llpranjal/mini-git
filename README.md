@@ -4,10 +4,8 @@ A small version-control system in Rust that writes Git's real loose-object
 format. Real `git` can inspect repositories created by `mgit`, and `mgit` can
 read loose objects written by real Git.
 
-The project is intentionally about one question:
-
-> How does content addressing turn files into immutable snapshots and commit
-> history?
+Files become content-addressed objects. Trees group them into snapshots, and
+commits link snapshots into history.
 
 ```text
 working tree --add--> index --commit--> tree + commit
@@ -31,8 +29,8 @@ mgit checkout
 mgit branch
 ```
 
-The first six commands are the core story. The remaining four make the stored
-snapshots useful without changing the underlying model.
+The commands cover object inspection, staging, snapshots, history, working-tree
+comparison, and branches.
 
 ## The three ideas
 
@@ -53,10 +51,10 @@ identifier is the object's name, and the zlib-compressed object is stored under:
 
 This gives two useful properties:
 
-- Equal IDs mean equal framed content.
+- Identical framed content produces identical IDs; SHA-1 collisions are not detected.
 - Writing the same object twice is a no-op because its path already exists.
 
-That second property is the entire deduplication mechanism:
+The store skips a write when the object path already exists:
 
 ```rust
 if path.exists() {
@@ -111,7 +109,7 @@ The test suite has 113 tests, including 11 Git interoperability tests.
 
 ## Architecture
 
-The dependency direction is bottom-up:
+Commands compose the storage and repository modules:
 
 ```text
 commands/   CLI workflows
@@ -238,12 +236,7 @@ three-way merge. This protects user data while keeping merge logic out of scope.
 - SHA-1 collision detection;
 - concurrent index updates.
 
-This is a content-addressed snapshot engine that interoperates with Git's loose
-object database, not a full Git replacement.
-
 ## Interview guide
 
-Start with the object framing rule, then walk one commit from index to trees to
-the branch ref. Use `git fsck --strict` and matching commit IDs as the proof that
-the format is correct. The prepared versions and common follow-ups are in
-[`docs/INTERVIEW.md`](docs/INTERVIEW.md).
+[Interview notes](docs/INTERVIEW.md) walk through a commit, the interoperability
+tests, and the main limitations.

@@ -19,16 +19,8 @@ path = "src/main.rs"
 name = "mgit-bench"
 path = "bench/main.rs"
 
-# Four dependencies, each justified in README.md ("Dependencies"), and zero
-# dev-dependencies: the tests use a hand-rolled scratch-directory helper
-# (src/scratch.rs) instead of pulling in `tempfile`. Everything else is written
-# by hand, including the object codec, the index format, the diff algorithm,
-# and ref resolution.
-#
-# Versions are pinned with `=` because this project targets Rust 1.84, while the
-# newest releases of clap and its transitive dependencies require the 2024
-# edition (Rust 1.85+). Without the pins, a fresh `cargo build` resolves to
-# versions that do not compile here. See JOURNAL.md.
+# Keep the pinned dependency versions compatible with the Rust 1.84 target.
+# Tests use the local scratch-directory helper in src/scratch.rs.
 [dependencies]
 sha1 = "=0.10.6"    # SHA-1 digest. Git names objects by SHA-1; hand-rolling a
                     # hash function would be a correctness liability, not a lesson.
