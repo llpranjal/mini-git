@@ -19,8 +19,7 @@
 //! common case. Myers was rejected here for a specific reason: LCS is about
 //! forty lines and can be explained on a whiteboard, Myers is not, and the
 //! guards below recover most of the practical difference. The honest cost of
-//! that choice is stated in the README under limitations and again in
-//! INTERVIEW.md under "what breaks at 10x scale".
+//! that choice is stated in the README under "Deliberate trade-offs".
 //!
 //! ## Guard 1: strip the common prefix and suffix
 //!
